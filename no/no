@@ -1,5 +1,3 @@
---// Adonis Detection & Kill Bypass Script (Constant Loop) //--
-
 local BypassManager = {
     Hooks = {},
     FlagFunction = nil,
@@ -72,6 +70,6 @@ task.spawn(function()
             tostring(StatusTracker.KillBlocked),
             tostring(StatusTracker.DebugInfoIntercepted)
         ))
-        task.wait(5) -- reapply every 5 seconds, adjust as needed
+        task.wait(5)
     end
 end)
