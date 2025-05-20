@@ -1,4 +1,4 @@
---// Adonis Detection & Kill Bypass Script //--
+--// Adonis Detection & Kill Bypass Script (Constant Loop) //--
 
 local BypassManager = {
     Hooks = {},
@@ -21,33 +21,23 @@ local function wrapFunction(target, handler)
 end
 
 local function activateBypass()
-    -- Set thread identity to system (2), required for some hooks
     pcall(function() setthreadidentity(2) end)
-
     for _, item in ipairs(getgc(true)) do
         if typeof(item) == 'table' then
             local detectionMethod = rawget(item, 'Detected')
             local killMethod = rawget(item, 'Kill')
-
-            -- Bypass Detection
             if typeof(detectionMethod) == 'function' and not BypassManager.FlagFunction then
                 BypassManager.FlagFunction = detectionMethod
                 wrapFunction(detectionMethod, function(trigger, details, preventCrash)
                     if trigger ~= '_' and BypassManager.IsVerbose then
                         warn('[Bypass] Adonis Detected:', trigger, 'Details:', details)
                     end
-                    return true -- Always pretend "no detection"
+                    return true
                 end)
                 table.insert(BypassManager.Hooks, detectionMethod)
                 StatusTracker.DetectionDisabled = true
             end
-
-            -- Bypass Kick/Kill
-            if typeof(killMethod) == 'function'
-                and rawget(item, 'Variables')
-                and rawget(item, 'Process')
-                and not BypassManager.TerminateFunction
-            then
+            if typeof(killMethod) == 'function' and rawget(item, 'Variables') and rawget(item, 'Process') and not BypassManager.TerminateFunction then
                 BypassManager.TerminateFunction = killMethod
                 wrapFunction(killMethod, function(cause)
                     if BypassManager.IsVerbose then
@@ -60,8 +50,6 @@ local function activateBypass()
             end
         end
     end
-
-    -- Hook debug.info if present & needed
     local returned
     returned = hookfunction(getrenv().debug.info, newcclosure(function(levelOrFunc, info)
         if BypassManager.FlagFunction and levelOrFunc == BypassManager.FlagFunction then
@@ -73,15 +61,17 @@ local function activateBypass()
         return returned(levelOrFunc, info)
     end))
     StatusTracker.DebugInfoIntercepted = true
-
-    -- Reset thread identity
     pcall(function() setthreadidentity(7) end)
 end
 
-activateBypass()
-
-print(('[Bypass Status] Detection Disabled: %s | Termination Blocked: %s | Debug Info Hooked: %s'):format(
-    tostring(StatusTracker.DetectionDisabled),
-    tostring(StatusTracker.KillBlocked),
-    tostring(StatusTracker.DebugInfoIntercepted)
-))
+task.spawn(function()
+    while true do
+        activateBypass()
+        print(('[Bypass Status] Detection Disabled: %s | Termination Blocked: %s | Debug Info Hooked: %s'):format(
+            tostring(StatusTracker.DetectionDisabled),
+            tostring(StatusTracker.KillBlocked),
+            tostring(StatusTracker.DebugInfoIntercepted)
+        ))
+        task.wait(5) -- reapply every 5 seconds, adjust as needed
+    end
+end)
