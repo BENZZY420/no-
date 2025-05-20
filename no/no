@@ -1,3 +1,5 @@
+--// Adonis Detection & Kill Bypass Script //--
+
 local BypassManager = {
     Hooks = {},
     FlagFunction = nil,
@@ -6,9 +8,9 @@ local BypassManager = {
 }
 
 local StatusTracker = {
-    DetectionDisabled = true,
-    KillBlocked = true,
-    DebugInfoIntercepted = true,
+    DetectionDisabled = false,
+    KillBlocked = false,
+    DebugInfoIntercepted = false,
 }
 
 local function wrapFunction(target, handler)
@@ -19,40 +21,29 @@ local function wrapFunction(target, handler)
 end
 
 local function activateBypass()
-    local currentThread = 2
-    setthreadidentity(currentThread)
+    -- Set thread identity to system (2), required for some hooks
+    pcall(function() setthreadidentity(2) end)
 
-    local collected = getgc(true)
-    for _, item in ipairs(collected) do
+    for _, item in ipairs(getgc(true)) do
         if typeof(item) == 'table' then
             local detectionMethod = rawget(item, 'Detected')
             local killMethod = rawget(item, 'Kill')
 
-            if
-                typeof(detectionMethod) == 'function'
-                and not BypassManager.FlagFunction
-            then
+            -- Bypass Detection
+            if typeof(detectionMethod) == 'function' and not BypassManager.FlagFunction then
                 BypassManager.FlagFunction = detectionMethod
-                wrapFunction(
-                    detectionMethod,
-                    function(trigger, details, preventCrash)
-                        if trigger ~= '_' and BypassManager.IsVerbose then
-                            warn(
-                                'Adonis Detected',
-                                trigger,
-                                'Details::',
-                                details
-                            )
-                        end
-                        return true
+                wrapFunction(detectionMethod, function(trigger, details, preventCrash)
+                    if trigger ~= '_' and BypassManager.IsVerbose then
+                        warn('[Bypass] Adonis Detected:', trigger, 'Details:', details)
                     end
-                )
+                    return true -- Always pretend "no detection"
+                end)
                 table.insert(BypassManager.Hooks, detectionMethod)
                 StatusTracker.DetectionDisabled = true
             end
 
-            if
-                typeof(killMethod) == 'function'
+            -- Bypass Kick/Kill
+            if typeof(killMethod) == 'function'
                 and rawget(item, 'Variables')
                 and rawget(item, 'Process')
                 and not BypassManager.TerminateFunction
@@ -60,7 +51,7 @@ local function activateBypass()
                 BypassManager.TerminateFunction = killMethod
                 wrapFunction(killMethod, function(cause)
                     if BypassManager.IsVerbose then
-                        warn('Adonis Tried Kicking you(i saved you bbg)', cause)
+                        warn('[Bypass] Adonis tried to kick you! Cause:', cause)
                     end
                     return nil
                 end)
@@ -69,37 +60,28 @@ local function activateBypass()
             end
         end
     end
-    local Returned
-    Returned = hookfunction(
-        getrenv().debug.info,
-        newcclosure(function(...)
-            local LevelOrFunc, Info = ...
-            if
-                BypassManager.FlagFunction
-                and LevelOrFunc == BypassManager.FlagFunction
-            then
-                if BypassManager.IsVerbose then
-                    warn('Tracksterman Contrasted the way!')
-                end
-                return coroutine.yield(coroutine.running())
-            end
-            return Returned(...)
-        end)
-    )
 
+    -- Hook debug.info if present & needed
+    local returned
+    returned = hookfunction(getrenv().debug.info, newcclosure(function(levelOrFunc, info)
+        if BypassManager.FlagFunction and levelOrFunc == BypassManager.FlagFunction then
+            if BypassManager.IsVerbose then
+                warn('[Bypass] Adonis debug.info check intercepted')
+            end
+            return 'Bypassed'
+        end
+        return returned(levelOrFunc, info)
+    end))
     StatusTracker.DebugInfoIntercepted = true
 
-    local resetThread = 7
-    setthreadidentity(resetThread)
+    -- Reset thread identity
+    pcall(function() setthreadidentity(7) end)
 end
 
 activateBypass()
 
-print(
-    string.format(
-        '[Bypass Status] Detection Disabled: %s | Termination Blocked: %s | Debug Info Hooked: %s',
-        tostring(StatusTracker.DetectionDisabled),
-        tostring(StatusTracker.KillBlocked),
-        tostring(StatusTracker.DebugInfoIntercepted)
-    )
-)
+print(('[Bypass Status] Detection Disabled: %s | Termination Blocked: %s | Debug Info Hooked: %s'):format(
+    tostring(StatusTracker.DetectionDisabled),
+    tostring(StatusTracker.KillBlocked),
+    tostring(StatusTracker.DebugInfoIntercepted)
+))
